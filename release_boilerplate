@@ -1,0 +1,42 @@
+#!/usr/bin/env node
+
+require('dotenv/config')
+
+const { createReadStream } = require('fs')
+const { join, resolve } = require('path')
+const { spawnSync } = require('child_process')
+const AWS = require('aws-sdk')
+const ora = require('ora')
+
+console.log()
+if (!process.argv[2]) {
+  console.log('  [!] Need the path to the boilerplate')
+  console.log()
+  process.exit(1)
+}
+const spinner = ora()
+spinner.text = 'Packing boilerplate'
+spinner.start()
+spawnSync('git', ['archive', '-o', join(process.cwd(), 'dist.tar.gz'), 'master'], {
+  cwd: resolve(process.cwd(), process.argv[2]),
+  stdio: 'inherit'
+})
+spinner.text = 'Uploading to S3'
+const s3 = new AWS.S3({
+  signatureVersion: 'v4',
+  params: { Bucket: process.env.AWS_S3_BUCKET }
+})
+s3.upload({
+  Key: 'website-boilerplate.tar.gz',
+  Body: createReadStream('dist.tar.gz'),
+  ACL: 'public-read'
+}, (err, data) => {
+  spinner.stop()
+  if (err) throw err
+  console.log(
+    '  Successfully uploaded to S3 s3://' +
+    process.env.AWS_S3_BUCKET +
+    '/website-boilerplate.tar.gz'
+  )
+  console.log()
+})
